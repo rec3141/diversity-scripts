@@ -1,0 +1,125 @@
+#files needed: mothur, uchime, *.R1.fastq, *.R2.fastq, arctic.files, silva.euks.manual.fasta, primers.oligos, mothur-batch.txt
+# somewhere got a _ in between name and read
+# sed -i.bak 's/_/ /g' trimmed_18S*.fastq
+# rm *.bak
+
+#mkdir mothur18S
+#cd mothur18S
+#ln /work/cryomics/apps/mothur/mothur ./
+#ln /work/cryomics/apps/mothur/uchime ./
+#cp ./../../Daneborg/mothur18S/primers.oligos ./
+#cp ./../../Daneborg/mothur18S/mothur-batch.txt ./
+
+
+#files referenced:
+#ln -s ./../../TIBIA/trimmed/trimmed_18S-Plate*pairs*.fastq ./
+#ln -s ./../../AMBON/trimmed/trimmed_18S-Plate*pairs*.fastq ./
+#ln -s /work/cryomics/reference_dbs/SILVA/silva.* ./
+#grep 18S ./../arctic.files > arctic.files
+
+#So... which to use for what application? If you have the RAM, I'd suggest using `silva.nr_v119.align` in `align.seqs`. It took about 10 minutes to read in the database file and a minute or so to align a 1000 full-length sequences. Here is an example workflow for use within mothur that will get you the V4 region of the 16S rRNA gene:
+#mothur "#pcr.seqs(fasta=silva.nr_v119.align, start=11894, end=25319, keepdots=F, processors=8);
+#        unique.seqs()"
+#This will get you 104,711 unique sequences to then align against (meh.). Other tricks to consider would be to use `get.lineage` to pull out the reference sequences that are from the Bacteria, this will probably only reduce the size of the database by ~10%. You could also try using `filter.seqs` with vertical=T; however, that might be problematic if there are insertions in your sequences (can't know *a priori*). It's likely that you can just use the `silva.seed_v119.align` reference for aligning. For classifying sequences, I would strongly recommend using the `silva.nr_v119.align` and `silva.nr_v119.tax` references after running pcr.seqs on `silva.nr_v119.align`. I probably wouldn't advise using `unique.seqs` on the output.
+
+##make database for regions of 18S
+#grep Eukaryota -A1 /work/cryomics/reference_dbs/SILVA/silva.nr_v123.align | grep -v '^--$' > /work/cryomics/reference_dbs/SILVA/silva.nr_v123.euks.align
+#grep Eukaryota /work/cryomics/reference_dbs/SILVA/silva.nr_v123.tax > /work/cryomics/reference_dbs/SILVA/silva.nr_v123.euks.tax
+#pcr.seqs(fasta=/work/cryomics/reference_dbs/SILVA/silva.nr_v123.euks.align, taxonomy=/work/cryomics/reference_dbs/SILVA/silva.nr_v123.euks.tax, keepdots=F, oligos=primers.oligos, processors=8)
+#summary.seqs(fasta=/work/cryomics/reference_dbs/SILVA/silva.nr_v123.euks.pcr.align)
+#screen.seqs(fasta=/work/cryomics/reference_dbs/SILVA/silva.nr_v123.euks.pcr.align, start=1, end=8240, processors=8)
+#summary.seqs(fasta=/work/cryomics/reference_dbs/SILVA/silva.nr_v123.euks.pcr.good.align) #retain 9613 seqs
+#system(mv /work/cryomics/reference_dbs/SILVA/silva.nr_v123.euks.pcr.good.align /work/cryomics/reference_dbs/SILVA/silva.euks.v4.align)
+
+#manual edit in seaview to remove several outlying sequencing
+#saved in /work/cryomics/reference_dbs/SILVA/silva.euks.v4.manual.fasta
+#grep '>' /work/cryomics/reference_dbs/SILVA/silva.euks.v4.manual.fasta | cut -f1,5 -d$'\t' | less | cut -f2 -d'>' > /work/cryomics/reference_dbs/SILVA/silva.euks.v4.manual.tax
+#sed -i.bak 's/ /_/g' silva.euks.v4.manual.*
+
+##CLASSIFY SEQUENCES IRREGARDLESS OF QUALITY
+
+##classify all sequences without regard to quality
+#not working make.contigs(file=arctic.files, oligos=primers.oligos, pdiffs=2, processors=8) #retain 
+make.contigs(file=arctic.files, processors=8) #retain 1081503
+
+unique.seqs(fasta=arctic.trim.contigs.fasta) #retain 341136
+count.seqs(name=arctic.trim.contigs.names, group=arctic.contigs.groups, processors=8)
+align.seqs(fasta=arctic.trim.contigs.unique.fasta, reference=silva.euks.v4.manual.fasta, processors=8)
+summary.seqs(fasta=arctic.trim.contigs.unique.align, count=arctic.trim.contigs.count_table, processors=8)
+
+screen.seqs(fasta=arctic.trim.contigs.unique.align, summary=arctic.trim.contigs.unique.summary, name=arctic.trim.contigs.names, start=1, end=8240, maxhomop=8, processors=8) #retain
+summary.seqs(fasta=arctic.trim.contigs.unique.good.align, count=arctic.trim.contigs.count_table)
+filter.seqs(fasta=arctic.trim.contigs.unique.good.align, vertical=T, trump=., processors=8) #retain 23041
+unique.seqs(fasta=arctic.trim.contigs.unique.good.filter.fasta, count=arctic.trim.contigs.count_table) #retain 15439 unique
+
+#seed=clear to work around mothur bug that doesn't allow the word 'seed' in a filename
+#classify.seqs(seed=clear,fasta=arctic.trim.contigs.unique.good.filter.unique.fasta, count=arctic.trim.contigs.unique.good.filter.count_table, reference=silva.seed_v119.align, taxonomy=silva.seed_v119.tax, cutoff=1, processors=8)
+classify.seqs(seed=clear,fasta=arctic.trim.contigs.unique.good.filter.unique.fasta, count=arctic.trim.contigs.unique.good.filter.count_table, reference=silva.euks.v4.manual.fasta, taxonomy=silva.euks.v4.manual.tax, cutoff=1, processors=8)
+remove.lineage(seed=clear,fasta=arctic.trim.contigs.unique.good.filter.unique.fasta, count=arctic.trim.contigs.unique.good.filter.count_table, taxonomy=arctic.trim.contigs.unique.good.filter.unique.manual.wang.taxonomy, taxon=Chloroplast-Mitochondria-unknown-Archaea-Bacteria)
+
+summary.tax(seed=clear,taxonomy=arctic.trim.contigs.unique.good.filter.unique.manual.wang.pick.taxonomy, count=arctic.trim.contigs.unique.good.filter.pick.count_table)
+summary.seqs(fasta=arctic.trim.contigs.unique.good.filter.unique.pick.fasta, count=arctic.trim.contigs.unique.good.filter.pick.count_table, processors=8) # retain  unique/ total
+
+
+
+# going the phylotyping route based on taxonomy classification
+# for input into PHINCH
+# GOING TO FAIL HERE BECAUSE I JUST ADDED THE SYSTEM CALL
+system(sed -E '#([0-9]+)##g' arctic.trim.contigs.unique.good.filter.unique.seed_v119.wang.pick.taxonomy arctic.trim.contigs.unique.good.filter.unique.seed_v119.wang.pick.noprobs.taxonomy
+phylotype(taxonomy=arctic.trim.contigs.unique.good.filter.unique.seed_v119.wang.pick.noprobs.taxonomy)
+make.shared(list=arctic.trim.contigs.unique.good.filter.unique.seed_v119.wang.pick.noprobs.tx.list, count=arctic.trim.contigs.unique.good.filter.pick.count_table, label=1) #1 for genus, 6 for kingdom
+classify.otu(list=arctic.trim.contigs.unique.good.filter.unique.seed_v119.wang.pick.noprobs.tx.list, taxonomy=arctic.trim.contigs.unique.good.filter.unique.seed_v119.wang.pick.noprobs.taxonomy)
+make.biom(shared=arctic.trim.contigs.unique.good.filter.unique.seed_v119.wang.pick.noprobs.tx.shared, constaxonomy=arctic.trim.contigs.unique.good.filter.unique.seed_v119.wang.pick.noprobs.tx.1.cons.taxonomy)
+#upload and look in PHINCH, but need to make .biom compatible with phinch:
+system(sed '#null#{}#g' *.biom > phinch-input.biom
+quit()
+
+#end here for now.
+
+# going the distance matrix route
+#need probability-less taxonomy file for cluster.split
+#either re-do classify.seqs with profs=f or gsed -r 's|[(][0-9]+[)]||g' arctic.trim.contigs.unique.good.filter.unique.seed_v119.wang.pick.taxonomy > arctic.trim.contigs.unique.good.filter.unique.seed_v119.wang.pick.noprobs.taxonomy
+#cluster.split(fasta=arctic.trim.contigs.unique.good.filter.unique.pick.fasta, count=arctic.trim.contigs.unique.good.filter.pick.count_table, taxonomy=arctic.trim.contigs.unique.good.filter.unique.seed_v119.wang.pick.noprobs.taxonomy, splitmethod=classify, taxlevel=4, cutoff=0.15, processors=8)
+#too big
+#make.shared(list=.....list, count=.....count_table, label=0.03)
+
+
+
+
+#pick out sequences of interest = Fungi
+# or use get.lineage()
+#system(grep Fungi arctic.trim.contigs.unique.unique.seed_v119.wang.taxonomy > arctic.trim.contigs.unique.unique.seed_v119.wang.Fungi.taxonomy)
+#list.seqs(taxonomy=arctic.trim.contigs.unique.unique.seed_v119.wang.Fungi.taxonomy)
+#get.seqs(accnos=arctic.trim.contigs.unique.unique.seed_v119.wang.Fungi.accnos)
+
+#phylotyping all sequences
+#align to manually curated trimmed silva database
+align.seqs(fasta=arctic.trim.contigs.pick.fasta, reference=silva.euks.manual.fasta)
+unique.seqs(fasta=arctic.trim.contigs.pick.align) #retain 687767
+summary.seqs(fasta=current, name=current)
+screen.seqs(fasta=current, summary=arctic.trim.contigs.pick.summary, name=current, start=2, end=2801, maxhomop=8)
+filter.seqs(fasta=current, vertical=T, trump=.)
+unique.seqs(fasta=current, name=current)
+
+pre.cluster(fasta=current, diffs=4, name=current) #at 4*2/450 ~ 1.8% max difference #retain 94000
+chimera.uchime(fasta=arctic.trim.contigs.pick.good.filter.unique.precluster.fasta, reference=self, name=current, dereplicate=t) #0 chimeras
+remove.seqs(fasta=current, accnos=current)
+
+dist.seqs(fasta=current, cutoff=0.20)
+cluster(column=current, name=current)
+
+classify.otu(list=current, taxonomy=current, label=0.03)
+get.oturep(fasta=arctic.trim.contigs.pick.good.filter.unique.precluster.pick.fasta, column=arctic.trim.contigs.pick.good.filter.unique.precluster.pick.dist, name=arctic.trim.contigs.pick.unique.good.filter.names)
+
+classify.otu(list=arctic.trim.contigs.pick.good.filter.unique.precluster.pick.an.list, taxonomy=arctic.trim.contigs.unique.unique.seed_v119.wang.Fungi.taxonomy, label=0.05)
+rarefaction.single(list=current)
+
+#phylogeny: use only good sequences
+
+#align to full silva alignment: SILVA_119_SSURef_Nr99_tax_silva_full_align_trunc.fasta
+align.seqs(fasta=arctic.trim.contigs.pick.fasta, reference=./../seq_data/SILVA_119_SSURef_Nr99_tax_silva_full_align_trunc.fasta)
+
+
+#looser first classification
+classify.seqs(fasta=arctic.trim.contigs.unique.unique.fasta, reference=silva.seed_v119.align, taxonomy=silva.seed_v119.tax, cutoff=1, processors=12, name=arctic.trim.contigs.names)
+
