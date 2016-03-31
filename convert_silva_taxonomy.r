@@ -29,7 +29,7 @@
 #      1       # out of all the labels, they leave Escherichia blank??
 
 # start from scratch with the silva.nr_v123.align headers
-# grep '>' silva.nr_v123.align | cut -f1,3 > silva.nr_v123.full
+# grep '>' silva.nr_v123.align | cut -f1,3 | cut -f2 -d'>' > silva.nr_v123.full
 
 #!/usr/bin/R
 
