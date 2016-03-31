@@ -86,6 +86,9 @@ map.in$taxout <- gsub(" ","_",map.in$taxout)
 
 tax.in <- read.table("silva.nr_v123.full",header=F,stringsAsFactors=F,sep="\t")
 colnames(tax.in) <- c("taxid","taxlabel")
+
+tax.in$taxlabel <- gsub("[[:space:]]+;", ";", tax.in$taxlabel) #fix extra space in "Eukaryota;Opisthokonta;Nucletmycea;Fungi;Dikarya;Ascomycota;Pezizomycotina;Dothideomycetes;Pleosporales;Phaeosphaeriaceae;Parastagonospora ;"
+
 tax.in$id <- 1:nrow(tax.in)
 
 tax.write <- merge(tax.in,map.in,all.x=T,sort=F)
