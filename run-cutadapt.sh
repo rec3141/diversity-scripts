@@ -61,7 +61,7 @@ echo $F1
 
     # using cutadapt: https://github.com/marcelm/cutadapt
 
-    /work/cryomics/apps/cutadapt -g file:$PRIMERS -G file:$PRIMERS --discard-untrimmed -j 8 -e 0.12 -o $FQO -p $RQO $FQ $RQ
+    cutadapt -g file:$PRIMERS -G file:$PRIMERS --discard-untrimmed -j 8 -e 0.12 -o $FQO -p $RQO $FQ $RQ
 
 	done;
 done;
